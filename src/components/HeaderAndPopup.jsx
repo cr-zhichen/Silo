@@ -1,7 +1,7 @@
 import { useRequest } from 'ahooks';
 import { useEffect, useRef, useState } from 'react';
 import { useActiveModels, useIsRowMode, useSetDefaultActiveModels } from '../store/app';
-import { isExperienceSK, useSecretKey, useZenMode } from '../store/storage';
+import { isExperienceSK, useSecretKey, useZenMode, isPaidSK, usePassword } from '../store/storage';
 import ScLogo from '../assets/img/sc-logo.png';
 import { fetchUserInfo } from '../services/api';
 import { useDarkMode, useIsMobile } from '../utils/use';
@@ -15,8 +15,9 @@ import { useTranslation } from 'react-i18next';
 import { SILO_ENV } from '@src/utils/env';
 
 export default function () {
-  const [showPopup, setShowPopup] = useState();
+  const [showPopup, setShowPopup] = useState(false);
   const [secretKey, setSecretKey] = useSecretKey();
+  const [password, setPassword] = usePassword();
   const [isDark, setDarkMode] = useDarkMode();
   const { i18n, t } = useTranslation();
 
@@ -28,6 +29,15 @@ export default function () {
     debounceWait: 300,
     manual: true,
   });
+  
+  const isMobile = useIsMobile();
+  const navigate = useNavigate();
+  const [isRowMode, setIsRowMode] = useIsRowMode();
+  const [isZenMode, setIsZenMode] = useZenMode();
+  const setDefaultActiveModels = useSetDefaultActiveModels();
+  
+  const [showInZen, setShowInZen] = useState(false);
+  
   const handleClick = () => {
     setShowPopup(true);
   };
@@ -52,26 +62,34 @@ export default function () {
       offset: [-20, -20],
     });
     // }
-    runAsync().then(() => {
-      setShowPopup(false);
-    });
-  }, [secretKey]);
-  const isMobile = useIsMobile();
-  const navigate = useNavigate();
-  const [isRowMode, setIsRowMode] = useIsRowMode();
-  const [isZenMode, setIsZenMode] = useZenMode();
-  const setDefaultActiveModels = useSetDefaultActiveModels();
+  }, [secretKey, t]);
 
-  const [showInZen, setShowInZen] = useState(false);
+  // Fetch user info on component mount
+  useEffect(() => {
+    runAsync()
+      .then(() => {
+        setShowPopup(false);
+      })
+      .catch(err => {
+        setShowPopup(true);
+        // Optionally handle the error here
+      });
+  }, [runAsync]);
+
+  // Handle Zen mode visibility
   useEffect(() => {
     if (isZenMode) {
       setShowInZen(false);
     }
   }, [isZenMode]);
 
+  // Show popup when there's an error
   useEffect(() => {
-    setShowPopup(error);
+    if (error) {
+      setShowPopup(true);
+    }
   }, [error]);
+
   const { addMoreModel, activeModels } = useActiveModels();
 
   return (
@@ -327,14 +345,51 @@ export default function () {
                 <img src="/logo.svg" alt="SiloChat" className="h-16 mr-8" />
                 <img src={ScLogo} alt="硅基流动" className="h-16 rounded-md" />
               </div>
+
+              <span className="text-lg text-gray-600 mb-4">
+                {t('鉴权密码和密钥二选一填写即可')}
+              </span>
+
+              {isPaidSK() && (
+                <input
+                  type="text"
+                  value={password}
+                  autoFocus={!password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder={t('输入鉴权密码')}
+                  className="w-full h-12 outline-none text-center bg-gray-100 dark:bg-gray-800 rounded-xl px-4 mb-4"
+                />
+              )}
+
               <input
                 type="password"
                 value={secretKey}
-                autoFocus={!secretKey}
                 onChange={e => setSecretKey(e.target.value)}
                 placeholder={t('在这里输入 SiliconCloud API 密钥')}
                 className="w-full h-12 outline-none text-center bg-gray-100 dark:bg-gray-800 rounded-xl px-4"
               />
+
+              <button
+                className="mt-4 w-full h-12 bg-primary text-white rounded-xl"
+                onClick={() => {
+                  runAsync()
+                    .then(() => {
+                      setShowPopup(false);
+                    })
+                    .catch(err => {
+                      notification.error({
+                        title: t('验证失败'),
+                        content: err.message,
+                        closeBtn: true,
+                        duration: 0,
+                        placement: 'top-right',
+                        offset: [-20, 20],
+                      });
+                    });
+                }}
+              >
+                {t('验证')}
+              </button>
 
               {!!secretKey && !!error && (
                 <span className="mt-4 text-sm text-red-400">
